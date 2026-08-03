@@ -1,15 +1,20 @@
 import datetime
-# pyrefly: ignore [missing-import]
 import aiosqlite
+import certifi
 from config import DB_PATH, MONGO_URI
 
 # Check if MongoDB is enabled
 USE_MONGO = bool(MONGO_URI and MONGO_URI.strip())
 
 if USE_MONGO:
-    # pyrefly: ignore [missing-import]
     from motor.motor_asyncio import AsyncIOMotorClient
-    mongo_client = AsyncIOMotorClient(MONGO_URI)
+    # Use certifi SSL CA bundle to prevent TLS handshake errors on Render/Linux
+    mongo_client = AsyncIOMotorClient(
+        MONGO_URI,
+        tls=True,
+        tlsCAFile=certifi.where(),
+        serverSelectionTimeoutMS=10000
+    )
     mongo_db = mongo_client.swiggy_bot
 else:
     mongo_client = None
