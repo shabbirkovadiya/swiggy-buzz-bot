@@ -48,10 +48,18 @@ async def init_db():
                     swiggy_name TEXT,
                     swiggy_link TEXT UNIQUE,
                     is_restricted INTEGER DEFAULT 0,
+                    can_receive_links INTEGER DEFAULT 1,
                     last_links_request_at TEXT,
                     created_at TEXT
                 )
             """)
+
+            # Migrate existing DBs that don't have the new column yet
+            try:
+                await db.execute("ALTER TABLE users ADD COLUMN can_receive_links INTEGER DEFAULT 1")
+                await db.commit()
+            except Exception:
+                pass  # Column already exists
 
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS links (
@@ -176,9 +184,12 @@ async def register_user_and_link(user_id: int, username: str, first_name: str, s
         async with get_db() as db:
             db.row_factory = aiosqlite.Row
             await db.execute("""
-                INSERT OR REPLACE INTO users (user_id, username, first_name, swiggy_name, swiggy_link, is_restricted, created_at)
-                VALUES (?, ?, ?, ?, ?, COALESCE((SELECT is_restricted FROM users WHERE user_id = ?), 0), ?)
-            """, (user_id, username, first_name, swiggy_name, swiggy_link, user_id, now))
+                INSERT OR REPLACE INTO users (user_id, username, first_name, swiggy_name, swiggy_link, is_restricted, can_receive_links, created_at)
+                VALUES (?, ?, ?, ?, ?,
+                    COALESCE((SELECT is_restricted FROM users WHERE user_id = ?), 0),
+                    COALESCE((SELECT can_receive_links FROM users WHERE user_id = ?), 1),
+                    ?)
+            """, (user_id, username, first_name, swiggy_name, swiggy_link, user_id, user_id, now))
 
             await db.execute("""
                 INSERT OR REPLACE INTO links (user_id, swiggy_name, swiggy_link, created_at)
@@ -194,6 +205,16 @@ async def restrict_user(user_id: int, status: int):
         async with get_db() as db:
             db.row_factory = aiosqlite.Row
             await db.execute("UPDATE users SET is_restricted = ? WHERE user_id = ?", (status, user_id))
+            await db.commit()
+
+async def set_user_can_receive_links(user_id: int, status: int):
+    """Toggle whether this user can receive links (1 = yes, 0 = no)."""
+    if USE_MONGO:
+        await mongo_db.users.update_one({"user_id": user_id}, {"$set": {"can_receive_links": status}})
+    else:
+        async with get_db() as db:
+            db.row_factory = aiosqlite.Row
+            await db.execute("UPDATE users SET can_receive_links = ? WHERE user_id = ?", (status, user_id))
             await db.commit()
 
 async def add_bulk_links(raw_links: list, admin_user_id: int):

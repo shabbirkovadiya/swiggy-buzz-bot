@@ -157,6 +157,17 @@ class AdminHandler(BaseHTTPRequestHandler):
                 _json(self, {"error": "Invalid key or value"}, 400)
             return
 
+        if path == "/api/user_toggle":
+            user_id = body.get("user_id")
+            value   = str(body.get("value", "")).strip()
+            if user_id and value in ("0", "1"):
+                asyncio.run_coroutine_threadsafe(
+                    self._toggle_user_links(int(user_id), int(value)), _loop
+                ).result(timeout=10)
+            else:
+                _json(self, {"error": "Invalid user_id or value"}, 400)
+            return
+
         self.send_response(404)
         self.end_headers()
 
@@ -179,6 +190,7 @@ class AdminHandler(BaseHTTPRequestHandler):
                     "first_name": u["first_name"],
                     "swiggy_name":u["swiggy_name"],
                     "is_restricted": u["is_restricted"],
+                    "can_receive_links": u.get("can_receive_links", 1) if isinstance(u, dict) else (u["can_receive_links"] if "can_receive_links" in u.keys() else 1),
                     "created_at": u["created_at"],
                 })
             _json(self, {"users": result})
@@ -220,6 +232,14 @@ class AdminHandler(BaseHTTPRequestHandler):
             _json(self, {"ok": True, "key": key, "value": value})
         except Exception as e:
             log_error(f"Settings update failed: {e}")
+            _json(self, {"error": str(e)}, 500)
+
+    async def _toggle_user_links(self, user_id: int, value: int):
+        try:
+            await database.set_user_can_receive_links(user_id, value)
+            _json(self, {"ok": True, "user_id": user_id, "can_receive_links": value})
+        except Exception as e:
+            log_error(f"User toggle failed: {e}")
             _json(self, {"error": str(e)}, 500)
 
     def log_message(self, format, *args):

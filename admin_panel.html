@@ -220,6 +220,23 @@
     width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.8);
   }
   .toggle-btn.active .toggle-dot{animation:pulse 1.5s infinite;}
+
+  /* ── MINI TOGGLE (per-user) ── */
+  .mini-toggle{
+    position:relative;width:44px;height:24px;
+    background:#334155;border-radius:24px;
+    cursor:pointer;transition:all .3s;border:none;outline:none;
+    flex-shrink:0;
+  }
+  .mini-toggle.on{background:linear-gradient(135deg,#22c55e,#16a34a);box-shadow:0 0 10px rgba(34,197,94,.3);}
+  .mini-toggle.off{background:#475569;}
+  .mini-toggle.loading{opacity:.5;pointer-events:none;}
+  .mini-toggle::after{
+    content:'';position:absolute;top:3px;left:3px;
+    width:18px;height:18px;border-radius:50%;
+    background:#fff;transition:transform .3s;box-shadow:0 1px 3px rgba(0,0,0,.3);
+  }
+  .mini-toggle.on::after{transform:translateX(20px);}
 </style>
 </head>
 <body>
@@ -342,11 +359,12 @@
               <th>Name / @Username</th>
               <th>Swiggy Name</th>
               <th>Status</th>
+              <th>Links</th>
               <th>Joined</th>
             </tr>
           </thead>
           <tbody id="users-tbody">
-            <tr><td colspan="5" class="no-data" style="text-align:center;">Loading…</td></tr>
+            <tr><td colspan="6" class="no-data" style="text-align:center;">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -561,7 +579,7 @@ async function loadUsers() {
     const d = await apiFetch('/api/users');
     const tbody = document.getElementById('users-tbody');
     if (!d.users || d.users.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#334155;padding:24px;">No users yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#334155;padding:24px;">No users yet.</td></tr>';
       return;
     }
     tbody.innerHTML = d.users.map(u => {
@@ -570,15 +588,36 @@ async function loadUsers() {
         ? '<span class="badge badge-restricted">🚫 Restricted</span>'
         : '<span class="badge badge-active">✅ Active</span>';
       const joined = u.created_at ? u.created_at.slice(0,10) : '—';
+      const canReceive = (u.can_receive_links ?? 1) == 1;
+      const toggleCls = canReceive ? 'mini-toggle on' : 'mini-toggle off';
+      const toggleTitle = canReceive ? 'Links ON — click to turn OFF' : 'Links OFF — click to turn ON';
       return `<tr>
         <td><code style="color:#818cf8">${u.user_id}</code></td>
         <td>${escHtml(name)}</td>
         <td>${escHtml(u.swiggy_name || '—')}</td>
         <td>${badge}</td>
+        <td><button class="${toggleCls}" id="utog-${u.user_id}" title="${toggleTitle}" onclick="toggleUserLinks(${u.user_id}, ${canReceive ? 0 : 1})"></button></td>
         <td>${joined}</td>
       </tr>`;
     }).join('');
-  } catch(e) { document.getElementById('users-tbody').innerHTML = `<tr><td colspan="5" style="color:#f87171;text-align:center;padding:16px;">Error: ${e.message}</td></tr>`; }
+  } catch(e) { document.getElementById('users-tbody').innerHTML = `<tr><td colspan="6" style="color:#f87171;text-align:center;padding:16px;">Error: ${e.message}</td></tr>`; }
+}
+
+async function toggleUserLinks(userId, newVal) {
+  const btn = document.getElementById('utog-' + userId);
+  if (btn) btn.classList.add('loading');
+  try {
+    await fetch(API + '/api/user_toggle', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-Secret': SECRET},
+      body: JSON.stringify({user_id: userId, value: String(newVal)})
+    });
+    // Refresh users table
+    await loadUsers();
+  } catch(e) {
+    console.error('toggle user failed', e);
+    if (btn) btn.classList.remove('loading');
+  }
 }
 
 // ── LINKS (50-50) ──

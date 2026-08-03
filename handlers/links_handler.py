@@ -1,7 +1,13 @@
 import datetime
+import re
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 import database
+
+def escape_md(text: str) -> str:
+    """Escape special Markdown v1 characters in a string to prevent parse errors."""
+    # Escape characters that have special meaning in Telegram Markdown v1
+    return re.sub(r'([_*`\[\]])', r'\\\1', text)
 
 async def links_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -22,6 +28,11 @@ async def links_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_db = await database.get_user(user.id)
     if user_db and user_db.get("is_restricted", 0) == 1:
         await update.message.reply_text("🚫 Aapka account restricted hai. Aap 50 links request nahi kar sakte.")
+        return
+
+    # 3b. Check if admin has disabled link delivery for this specific user
+    if user_db and user_db.get("can_receive_links", 1) == 0:
+        await update.message.reply_text("⏳ Aapke liye links abhi available nahi hain. Kripya kuch samay baad try karein.")
         return
 
     # 4. Check if User Registered a Link
@@ -77,26 +88,33 @@ async def links_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link_ids = [l["id"] for l in links]
     await database.record_link_distributions(user.id, link_ids)
 
-    # 8. Send Links in Chunked Messages (Telegram message length limit is 4096 chars)
+    # 8. Send each link as a separate individual message
     total_fetched = len(links)
     await update.message.reply_text(
-        f"🎯 *Found {total_fetched} Links for you!* (Max 50 per 24 hours)\n\n"
+        f"🎯 *{total_fetched} Links mil gaye!* (Max 50 per 24 hours)\n\n"
         f"📌 *Note:* Kripya sabhi links ko buzz back karein so everyone benefits!",
         parse_mode="Markdown"
     )
 
-    chunk_size = 15
-    for i in range(0, total_fetched, chunk_size):
-        chunk = links[i : i + chunk_size]
-        msg_lines = [f"📋 *Links batch ({i + 1} to {i + len(chunk)} of {total_fetched}):*\n"]
-        
-        for idx, item in enumerate(chunk, start=i + 1):
-            name = item["swiggy_name"] or "User"
-            url = item["swiggy_link"]
-            msg_lines.append(f"{idx}. *{name}*\n🔗 {url}\n")
-
-        message_text = "\n".join(msg_lines)
-        await update.message.reply_text(message_text, parse_mode="Markdown", disable_web_page_preview=True)
+    import asyncio
+    for idx, item in enumerate(links, start=1):
+        name = escape_md(item["swiggy_name"] or "User")
+        url = item["swiggy_link"]
+        try:
+            await update.message.reply_text(
+                f"{idx}\. *{name}*\n🔗 {url}",
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            )
+        except Exception:
+            # Fallback without markdown if name still causes issues
+            await update.message.reply_text(
+                f"{idx}. {item['swiggy_name'] or 'User'}\n🔗 {url}",
+                disable_web_page_preview=True
+            )
+        # Small delay to avoid hitting Telegram rate limits
+        if idx % 10 == 0:
+            await asyncio.sleep(0.5)
 
 def get_links_handler():
     return CommandHandler("links", links_command)
