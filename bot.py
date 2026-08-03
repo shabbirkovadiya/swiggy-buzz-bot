@@ -120,6 +120,14 @@ class AdminHandler(BaseHTTPRequestHandler):
             asyncio.run_coroutine_threadsafe(self._send_users(), _loop).result(timeout=10)
             return
 
+        if path == "/api/links":
+            asyncio.run_coroutine_threadsafe(self._send_links(), _loop).result(timeout=10)
+            return
+
+        if path == "/api/settings":
+            asyncio.run_coroutine_threadsafe(self._send_settings(), _loop).result(timeout=10)
+            return
+
         self.send_response(404)
         self.end_headers()
 
@@ -134,6 +142,19 @@ class AdminHandler(BaseHTTPRequestHandler):
                 _json(self, {"ok": True})
             else:
                 _json(self, {"error": "Wrong code"}, 403)
+            return
+
+        if not _auth_ok(self):
+            _json(self, {"error": "Unauthorized"}, 401)
+            return
+
+        if path == "/api/settings":
+            key   = str(body.get("key", "")).strip()
+            value = str(body.get("value", "")).strip()
+            if key in ("bot_active", "links_enabled") and value in ("0", "1"):
+                asyncio.run_coroutine_threadsafe(self._set_setting(key, value), _loop).result(timeout=10)
+            else:
+                _json(self, {"error": "Invalid key or value"}, 400)
             return
 
         self.send_response(404)
@@ -163,6 +184,42 @@ class AdminHandler(BaseHTTPRequestHandler):
             _json(self, {"users": result})
         except Exception as e:
             log_error(f"Users fetch failed: {e}")
+            _json(self, {"error": str(e)}, 500)
+
+    async def _send_links(self):
+        try:
+            rows, total = await database.get_all_links_paginated(page=1, per_page=500)
+            result = []
+            for r in rows:
+                result.append({
+                    "id":             r["id"],
+                    "user_id":        r["user_id"],
+                    "swiggy_name":    r["swiggy_name"],
+                    "swiggy_link":    r["swiggy_link"],
+                    "received_count": r["received_count"],
+                    "created_at":     r["created_at"],
+                    "username":       r["username"] if "username" in r.keys() else None,
+                })
+            _json(self, {"links": result, "total": total})
+        except Exception as e:
+            log_error(f"Links fetch failed: {e}")
+            _json(self, {"error": str(e)}, 500)
+
+    async def _send_settings(self):
+        try:
+            bot_active    = await database.get_setting("bot_active", "1")
+            links_enabled = await database.get_setting("links_enabled", "1")
+            _json(self, {"bot_active": bot_active, "links_enabled": links_enabled})
+        except Exception as e:
+            log_error(f"Settings fetch failed: {e}")
+            _json(self, {"error": str(e)}, 500)
+
+    async def _set_setting(self, key: str, value: str):
+        try:
+            await database.set_setting(key, value)
+            _json(self, {"ok": True, "key": key, "value": value})
+        except Exception as e:
+            log_error(f"Settings update failed: {e}")
             _json(self, {"error": str(e)}, 500)
 
     def log_message(self, format, *args):
