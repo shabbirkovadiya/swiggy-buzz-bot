@@ -1,0 +1,57 @@
+========================================================================
+             SWIGGY BUZZ TELEGRAM BOT - SETUP & REQUIREMENTS
+========================================================================
+
+1. DATABASE USED:
+-----------------
+• Database: SQLite 3 (using `aiosqlite` in Python)
+• Why SQLite?: 
+  - Single-file database (swiggy_bot.db).
+  - High performance & zero external server required (MySQL/PostgreSQL setup nahi karna padega).
+  - Auto-creates all tables automatically when bot starts.
+
+2. PYTHON PACKAGES REQUIRED (pip install -r requirements.txt):
+-------------------------------------------------------------
+- python-telegram-bot>=20.7  (Telegram Bot API Async Framework)
+- aiosqlite>=0.19.0           (Async SQLite Database Driver)
+- python-dotenv>=1.0.0         (Environment Variable Loader)
+
+3. HOW TO CONFIGURE (.env file):
+--------------------------------
+Open .env file and set:
+BOT_TOKEN=8828239744:AAHKaccXHIZDhydfk9Xws6sJxGg5CJCuZGU
+ADMIN_IDS=YOUR_TELEGRAM_USER_ID
+
+*Tip: User ID nikalne ke liye Telegram pe @userinfobot ko message karein.*
+
+4. HOW TO RUN THE BOT:
+----------------------
+Step 1: Install Python 3.10 or higher
+Step 2: Install dependencies:
+        pip install -r requirements.txt
+Step 3: Run Bot:
+        python bot.py
+
+========================================================================
+                       BOT FEATURES BREAKDOWN
+========================================================================
+- /start Command:
+  - User se link mange: "Upload your Swiggy Buzz link here"
+  - Note: "Agar aap roj logo ko buzz back kr sake to hi bot use kre"
+  - Swiggy Name mange.
+  - Link ko DB me safe store kare. Duplicate link reject kare. User ki apni link usko dubara na bheje.
+  - Success Msg: "Your link is recorded. Type /links for 50 links."
+
+- /links Command:
+  - User ko DB se 50 unique links bheje.
+  - Each link strictly max 50 unique users ko hi distribution ho. 50 counts pure hone par link expire ho jaye.
+  - 24-hour Limit: User ek baar 50 links lene ke 24 hrs baad hi next 50 request kar sake.
+  - Admin toggle logic: Admin block/pause kar sake. Disabled hone par: "We are working on it. Request after sometime." aayega.
+
+- /admin Panel:
+  - Command: /admin
+  - Bot Status Toggle (ON / Maintenance)
+  - 50 Links Request Switch Toggle (ON / Pause with "We are working on it")
+  - User Restrict / Unrestrict by Telegram ID
+  - View Links Panel in 50-50 per page pagination + view counts
+  - Broadcast announcement message to all bot users
