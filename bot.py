@@ -1,5 +1,8 @@
+import os
 import asyncio
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
 from config import BOT_TOKEN
 import database
@@ -14,6 +17,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Lightweight Health Check HTTP Server for Render Web Services
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"OK - Swiggy Buzz Bot is Live")
+
+    def log_message(self, format, *args):
+        return # Quiet health check logs
+
+def run_health_server():
+    port = int(os.getenv("PORT", "10000"))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    logger.info(f"Health check server listening on port {port}")
+    server.serve_forever()
+
 async def post_init(application):
     logger.info("Initializing database...")
     await database.init_db()
@@ -23,6 +43,11 @@ def main():
     if not BOT_TOKEN or "YOUR_TELEGRAM_BOT_TOKEN" in BOT_TOKEN:
         logger.error("Error: BOT_TOKEN is missing or invalid in .env file.")
         return
+
+    # If running on Render as a Web Service, start Health Check HTTP server on PORT
+    port_env = os.getenv("PORT")
+    if port_env:
+        threading.Thread(target=run_health_server, daemon=True).start()
 
     logger.info("Starting Swiggy Buzz Telegram Bot...")
 
