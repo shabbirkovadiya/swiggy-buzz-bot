@@ -5,7 +5,7 @@ import threading
 import json
 import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import BOT_TOKEN, ADMIN_IDS
 import database
 from handlers.start_handler import get_start_conversation_handler
@@ -242,6 +242,10 @@ async def post_init(application):
     logger.info("Database initialized successfully.")
     log_activity("Bot started ✅", "SUCCESS")
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    log_error(f"Telegram Handler Error: {context.error}")
+
 def main():
     if not BOT_TOKEN or "YOUR_TELEGRAM_BOT_TOKEN" in BOT_TOKEN:
         logger.error("Error: BOT_TOKEN is missing or invalid in .env file.")
@@ -260,6 +264,7 @@ def main():
         .build()
     )
 
+    application.add_error_handler(error_handler)
     application.add_handler(get_start_conversation_handler())
     application.add_handler(get_links_handler())
     application.add_handler(get_admin_conversation_handler())

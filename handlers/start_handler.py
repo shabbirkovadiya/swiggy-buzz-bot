@@ -22,7 +22,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check user restriction
     user_db = await database.get_user(user.id)
-    if user_db and user_db["is_restricted"] == 1:
+    if user_db and user_db.get("is_restricted", 0) == 1:
         await update.message.reply_text("🚫 Aapka account restricted hai. Aap bot use nahi kar sakte.")
         return ConversationHandler.END
 

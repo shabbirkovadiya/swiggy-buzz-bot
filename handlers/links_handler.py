@@ -20,7 +20,7 @@ async def links_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 3. Check User Restriction
     user_db = await database.get_user(user.id)
-    if user_db and user_db["is_restricted"] == 1:
+    if user_db and user_db.get("is_restricted", 0) == 1:
         await update.message.reply_text("🚫 Aapka account restricted hai. Aap 50 links request nahi kar sakte.")
         return
 
@@ -34,7 +34,7 @@ async def links_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # 5. Check 24-Hour Cooldown Limit
-    last_req_str = user_db["last_links_request_at"] if user_db else None
+    last_req_str = user_db.get("last_links_request_at") if user_db else None
     now = datetime.datetime.now(datetime.timezone.utc)
 
     if last_req_str:

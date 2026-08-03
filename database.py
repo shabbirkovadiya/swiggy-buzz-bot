@@ -114,7 +114,8 @@ async def get_user(user_id: int):
         async with get_db() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cursor:
-                return await cursor.fetchone()
+                row = await cursor.fetchone()
+                return dict(row) if row else None
 
 async def link_exists(swiggy_link: str) -> bool:
     if USE_MONGO:
@@ -194,6 +195,51 @@ async def restrict_user(user_id: int, status: int):
             db.row_factory = aiosqlite.Row
             await db.execute("UPDATE users SET is_restricted = ? WHERE user_id = ?", (status, user_id))
             await db.commit()
+
+async def add_bulk_links(raw_links: list, admin_user_id: int):
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    added_count = 0
+    dup_count = 0
+    invalid_count = 0
+
+    for link in raw_links:
+        link_str = str(link).strip()
+        if not link_str:
+            continue
+            
+        if not (link_str.startswith("http://") or link_str.startswith("https://")):
+            invalid_count += 1
+            continue
+
+        if await link_exists(link_str):
+            dup_count += 1
+            continue
+
+        if USE_MONGO:
+            try:
+                await mongo_db.links.insert_one({
+                    "user_id": admin_user_id,
+                    "swiggy_name": "Admin Upload",
+                    "swiggy_link": link_str,
+                    "received_count": 0,
+                    "created_at": now
+                })
+                added_count += 1
+            except Exception:
+                dup_count += 1
+        else:
+            async with get_db() as db:
+                try:
+                    await db.execute("""
+                        INSERT INTO links (user_id, swiggy_name, swiggy_link, created_at)
+                        VALUES (?, ?, ?, ?)
+                    """, (admin_user_id, "Admin Upload", link_str, now))
+                    await db.commit()
+                    added_count += 1
+                except Exception:
+                    dup_count += 1
+
+    return added_count, dup_count, invalid_count
 
 async def get_available_links_for_user(user_id: int, limit: int = 50):
     if USE_MONGO:
